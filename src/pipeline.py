@@ -34,20 +34,24 @@ class Analysis:
 def _analyse(path: str, info: VideoInfo, on_progress: Callable[[float], None] | None
              ) -> tuple[np.ndarray, int, list[Detection], list[tuple[float, str]]]:
     tracker = Tracker()
-    signal_every = max(1, round(info.fps / SIGNAL_HZ))
-    probe_every = max(1, round(info.fps * ALIGN_PROBE_SEC))
+    # Scheduled by time, not frame index: with a detector stride that does not divide the signal
+    # interval (e.g. every 8th frame vs every 15th), index-based sampling silently slows to ~0.25 Hz.
+    next_signal_t, next_probe_t, probes = 0.0, 0.0, 0
     A, inliers, lamps = np.eye(2, 3), 0, None
     dets: list[Detection] = []
     samples: list[tuple[float, str]] = []
     for idx, t, frame in iter_frames(path, config.DETECT_STRIDE):
-        # same frames and criterion as align.estimate_for_video, without decoding them twice
-        if idx % probe_every == 0 and (idx // probe_every < align.N_PROBE_FRAMES or lamps is None):
+        # same spacing and criterion as align.estimate_for_video, without decoding the frames twice
+        if t >= next_probe_t - 1e-6 and (probes < align.N_PROBE_FRAMES or lamps is None):
+            next_probe_t += ALIGN_PROBE_SEC
+            probes += 1
             A_try, n = align.estimate(frame)
             if n >= align.MIN_INLIERS and n > inliers:
                 A, inliers = A_try, n
                 lamps = Scene.load(with_priors=False).to_video(A).lights["main"]
         dets += tracker.update(frame, idx, t)
-        if lamps is not None and idx % signal_every == 0:
+        if lamps is not None and t >= next_signal_t - 1e-6:
+            next_signal_t = t + 1.0 / SIGNAL_HZ
             samples.append((t, light_state(frame, lamps)))
             if on_progress and info.duration:
                 on_progress(min(1.0, t / info.duration))
