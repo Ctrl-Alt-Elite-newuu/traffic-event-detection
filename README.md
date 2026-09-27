@@ -69,6 +69,48 @@ One decode pass for Part A plus the harness's decode for Part B. On a laptop CPU
 clip takes 8.8× real time, ~90 % of it in YOLO; on a T4 the detector cost drops by an order of
 magnitude, for an estimated ~2× real time against the 3× budget.
 
+## Engineering and security practices
+
+How the code gets from a laptop to the judges and to the public demo.
+
+**Repository and CI**
+- Two branches: all work lands on `dev`; `main` changes only through pull requests. A ruleset on
+  `main` blocks force pushes and deletion and requires a pull request with passing checks.
+- Every push and pull request runs CI (`.github/workflows/ci.yml`): a clean install from
+  `requirements.txt`, an import check of the harness interface, and `evaluate.py --validate-only` on
+  the committed predictions. The demo's Docker image is built on every push, so a broken build is
+  caught on `dev`, but it is only published and deployed from `main`.
+- Workflows run with least-privilege tokens (`contents: read`; `packages: write` only for the job
+  that publishes the image). Dependencies are pinned to exact versions.
+- No secrets or large data in git: the 19 GB of sample videos and all caches are ignored; the deploy
+  key lives only in GitHub's encrypted Actions secrets.
+
+**Server (`deploy/`)**
+- The demo shares a server with other projects, so it is isolated rather than given the machine:
+  a dedicated `traffic` user (no password, SSH key only, used by nothing else) owns the two
+  directories it deploys to, with its own ed25519 key used only by GitHub Actions.
+- The API container listens on `127.0.0.1:8001` only; the one public entry point is the existing
+  Caddy, which terminates HTTPS (Let's Encrypt certificate, automatic renewal, HTTP → HTTPS
+  redirect). Adding our site was one site block; the server's other sites were not touched.
+- Every deploy pins the image to the exact commit (`DEMO_TAG=<git sha>`), so what runs is always
+  traceable to a commit and can be rolled back by re-running an older workflow.
+
+**Demo API hardening (`demo/app.py`)**
+- Uploads are limited twice: 320 MB at the proxy and 300 MB in the app, which streams the upload
+  to disk in 1 MB chunks and aborts past the limit instead of buffering it in memory.
+- Only `.mp4` files are accepted, and the video is opened and its duration checked (≤ 2 min)
+  before any work is queued.
+- One job runs at a time, so a burst of uploads queues instead of exhausting a 2-core server.
+- Uploaded videos are deleted as soon as processing ends, including on errors; nothing is kept.
+- CORS is restricted to the site's own origin, and a failing job returns an error message
+  instead of taking the server down.
+
+**Known gaps** (what we would do next): the container still runs as root inside Docker; GitHub
+Actions are pinned to major-version tags rather than commit SHAs; there is no per-client rate
+limit beyond the single-job queue. Membership of the `docker` group is effectively root on the
+host, so the dedicated user separates our deploys from the other projects but is not a security
+boundary on its own.
+
 ## Reproducing everything
 
 ```bash
