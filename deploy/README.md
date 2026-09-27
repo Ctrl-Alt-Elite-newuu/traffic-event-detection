@@ -34,8 +34,9 @@ Variables:
 | `DEPLOY_DIR` | `/opt/traffic` | — |
 | `SITE_DIR` | — | `/srv/site` |
 
-The demo image is published to GHCR as `ghcr.io/ctrl-alt-elite-newuu/traffic-event-detection-demo`.
-Make the package public (Package settings → Change visibility) so the server can pull it without a token.
+The demo image is published to GHCR as `ghcr.io/ctrl-alt-elite-newuu/traffic-event-detection-demo`
+and stays private: each deploy logs the server in with the workflow run's short-lived token and logs
+out right after pulling.
 
 ## Branch flow
 All work is pushed to `dev`; `main` only changes through a pull request from `dev`.

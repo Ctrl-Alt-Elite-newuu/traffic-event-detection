@@ -92,6 +92,9 @@ How the code gets from a laptop to the judges and to the public demo.
 - The API container listens on `127.0.0.1:8001` only; the one public entry point is the existing
   Caddy, which terminates HTTPS (Let's Encrypt certificate, automatic renewal, HTTP → HTTPS
   redirect). Adding our site was one site block; the server's other sites were not touched.
+- The demo image stays private in GitHub's registry. Each deploy logs the server in with that
+  workflow run's own token, which expires when the run ends, and logs out right after pulling, so
+  no registry credentials are ever stored on the server.
 - Every deploy pins the image to the exact commit (`DEMO_TAG=<git sha>`), so what runs is always
   traceable to a commit and can be rolled back by re-running an older workflow.
 
