@@ -1,4 +1,7 @@
-"""Live-demo API: upload a video, run the same pipeline as the submission, fetch the results.
+"""Live-demo API: upload a video, run the submission's pipeline and rules on it, fetch the results.
+
+The demo server has 2 CPU cores and no GPU, so it runs the detector at ~4 Hz / 800 px (TRAFFIC_DETECT_* in
+demo/Dockerfile) and computes the risk curve from the same tracks instead of a second detector pass.
 
     uvicorn demo.app:app --host 0.0.0.0 --port 8000
 
@@ -30,11 +33,16 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 import solution  # noqa: E402
+from src.pipeline import analyse  # noqa: E402
+from src.risk import curve_from_tracks  # noqa: E402
+from src.rules import detect_all  # noqa: E402
+from src.scene import Scene  # noqa: E402
+from src.segments import to_events  # noqa: E402
 from src.video import probe  # noqa: E402
 
 JOBS_DIR = Path(os.environ.get("JOBS_DIR", "/tmp/demo-jobs"))
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "300"))
-MAX_DURATION_SEC = float(os.environ.get("MAX_DURATION_SEC", "150"))
+MAX_DURATION_SEC = float(os.environ.get("MAX_DURATION_SEC", "120"))
 CORS_ORIGINS = [o for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o]
 
 
@@ -63,16 +71,20 @@ def _set(job: Job, **kw) -> None:
 
 def _run(job: Job, path: Path) -> None:
     try:
-        info = probe(str(path))
-        _set(job, status="running", stage="detecting events", progress=0.05)
-        events = solution.detect_events(str(path))
-        _set(job, stage="computing accident risk", progress=0.6)
-        risk = _risk_curve(path, info, lambda p: _set(job, progress=0.6 + 0.4 * p))
+        _set(job, status="running", stage="detecting and tracking road users", progress=0.02)
+        analysis = analyse(str(path), on_progress=lambda p: _set(job, progress=0.02 + 0.9 * p))
+        _set(job, stage="applying event rules", progress=0.93)
+        by_class = detect_all(analysis.tracks, Scene.load(), analysis.signal)
+        events = to_events(by_class, analysis.info.duration, solution.ENABLED)
+        _set(job, stage="computing accident risk", progress=0.97)
+        risk = [[round(t, 2), round(s, 4)] for t, s in curve_from_tracks(analysis.tracks)]
+        info = analysis.info
         result = {
             "video": {"name": path.name, "duration": info.duration, "fps": info.fps,
                       "width": info.width, "height": info.height},
-            "events": sorted(events),
+            "events": events,
             "risk": risk,
+            "signals": analysis.signal.phases,
         }
         _set(job, status="done", stage="done", progress=1.0, result=result)
     except Exception as exc:  # the demo must never crash the server
@@ -80,30 +92,6 @@ def _run(job: Job, path: Path) -> None:
         _set(job, status="error", stage="failed", error=str(exc))
     finally:
         shutil.rmtree(path.parent, ignore_errors=True)
-
-
-def _risk_curve(path: Path, info, on_progress) -> list[list[float]]:
-    """Stream frames through RiskEstimator exactly like run_submission.py, keeping ~5 points per second."""
-    import cv2
-
-    est = solution.RiskEstimator()
-    est.reset({"video_id": path.name, "fps": info.fps, "width": info.width, "height": info.height,
-               "n_frames": info.n_frames})
-    keep_every = max(1, round(info.fps / 5))
-    cap = cv2.VideoCapture(str(path))
-    curve, idx = [], 0
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        score = float(est.step(frame, idx / info.fps))
-        if idx % keep_every == 0:
-            curve.append([round(idx / info.fps, 2), round(min(1.0, max(0.0, score)), 4)])
-        if idx % 100 == 0 and info.n_frames:
-            on_progress(idx / info.n_frames)
-        idx += 1
-    cap.release()
-    return curve
 
 
 @app.get("/api/health")

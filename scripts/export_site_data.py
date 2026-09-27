@@ -5,6 +5,7 @@
 Writes:
     videos.json               per-video facts, counts over time, track totals, signal phases, alignment
     eda/*.jpg                 thumbnails, scene layout, motion heatmaps, trajectories, alignment check
+    results/<video>.json      events and risk curve per video, with --predictions predictions_samples.json
 Needs cache/<video>.tracks.csv (scripts/cache_tracks.py) and, for phases, cache/<video>.signals.json
 (scripts/cache_signals.py).
 """
@@ -163,6 +164,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("videos", nargs="+")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--predictions", type=Path, help="predictions.json from run_submission.py, for results/")
     args = ap.parse_args()
     (args.out / "eda").mkdir(parents=True, exist_ok=True)
 
@@ -184,6 +186,14 @@ def main() -> int:
 
     (args.out / "videos.json").write_text(json.dumps({"videos": videos, "alignment_example": shifted["id"]},
                                                      separators=(",", ":")))
+    if args.predictions:
+        (args.out / "results").mkdir(exist_ok=True)
+        for name, pred in json.loads(args.predictions.read_text())["videos"].items():
+            risk = pred["risk"][::6]                    # ~5 points per second is plenty for a chart
+            result = {"events": pred["events"], "risk": risk}
+            if (args.out / "results" / f"{Path(name).stem}.mp4").exists():   # from render_annotated.py
+                result["annotated_video"] = f"results/{Path(name).stem}.mp4"
+            (args.out / "results" / f"{Path(name).stem}.json").write_text(json.dumps(result, separators=(",", ":")))
     print(f"wrote {args.out}")
     return 0
 

@@ -55,7 +55,7 @@ def estimate(frame: np.ndarray) -> tuple[np.ndarray, int]:
 
 def estimate_for_video(path: str, fps: float) -> tuple[np.ndarray, int]:
     """Best transform over a few frames spread across the first seconds of the video."""
-    stride = max(1, int(fps * 4))
+    stride = max(1, round(fps * 4))
     best = (np.eye(2, 3), 0)
     for i, (_, _, frame) in enumerate(iter_frames(path, stride)):
         if i >= N_PROBE_FRAMES:

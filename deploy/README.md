@@ -1,42 +1,41 @@
 # Deployment
 
-One Linux server with Docker runs the whole public site:
+The team server already runs Caddy for other sites, so we reuse it:
 
 ```
-https://DOMAIN  ->  Caddy (HTTPS, static website from SITE_DIR)
-                    └── /api/*  ->  demo container (FastAPI, demo/app.py, CPU inference)
+https://ctrl-alt-elite.sukoon.uz ─► existing Caddy (HTTPS, other sites untouched)
+                                    ├── /api/*  ─► demo container on 127.0.0.1:8001 (FastAPI, CPU)
+                                    └── else    ─► static website in /srv/site
 ```
 
 ## One-time server setup
-1. Point the domain's DNS `A` record at the server's IP.
-2. Install Docker, create a deploy user that may run it, and add the deploy SSH public key to
-   `~deploy/.ssh/authorized_keys`.
-3. `sudo apt install rsync && sudo mkdir -p /srv/site /opt/traffic && sudo chown deploy /srv/site /opt/traffic`
+1. DNS: `A` record `ctrl-alt-elite.sukoon.uz` → server IP.
+2. Docker, rsync and a dedicated user for our deploys (`traffic`), allowed to run Docker:
+   ```bash
+   curl -fsSL https://get.docker.com | sudo sh
+   sudo apt-get install -y rsync
+   sudo adduser --disabled-password --gecos "" traffic && sudo usermod -aG docker traffic
+   sudo mkdir -p /srv/site /opt/traffic /home/traffic/.ssh
+   sudo chown -R traffic:traffic /srv/site /opt/traffic /home/traffic/.ssh
+   ```
+   Add the GitHub Actions public key to `/home/traffic/.ssh/authorized_keys`.
+3. Add the contents of `caddy-site.caddy` to `/etc/caddy/Caddyfile`, then
+   `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl reload caddy`.
 
-## GitHub configuration (both repositories)
-Secrets (Settings → Secrets and variables → Actions → Secrets):
+## GitHub configuration
+Secrets (both repositories): `SSH_HOST`, `SSH_USER` (`traffic`), `SSH_PORT` (`22`), `SSH_PRIVATE_KEY`.
 
-| Secret | Value |
-|---|---|
-| `SSH_HOST` | server IP or hostname |
-| `SSH_USER` | deploy user, e.g. `deploy` |
-| `SSH_PRIVATE_KEY` | private key matching the server's authorized key |
-| `SSH_PORT` | usually `22` |
+Variables:
 
-Variables (same page → Variables):
-
-| Variable | Value |
-|---|---|
-| `DEPLOY_ENABLED` | `true` once the server exists; deploy jobs are skipped until then |
-| `DOMAIN` | e.g. `traffic.example.uz` |
-| `DEPLOY_DIR` | `/opt/traffic` (compose files, this repo only) |
-| `SITE_DIR` | `/srv/site` (website build) |
+| Variable | Backend | Website |
+|---|---|---|
+| `DEPLOY_ENABLED` | `true` | `true` |
+| `DOMAIN` | `ctrl-alt-elite.sukoon.uz` | — |
+| `DEPLOY_DIR` | `/opt/traffic` | — |
+| `SITE_DIR` | — | `/srv/site` |
 
 The demo image is published to GHCR as `ghcr.io/ctrl-alt-elite-newuu/traffic-event-detection-demo`.
 Make the package public (Package settings → Change visibility) so the server can pull it without a token.
-
-The website repository (`traffic-event-detection-web`) needs the same four secrets and the
-`DEPLOY_ENABLED` and `SITE_DIR` variables; `API_BASE` is optional (defaults to the same origin).
 
 ## Branch flow
 All work is pushed to `dev`; `main` only changes through a pull request from `dev`.

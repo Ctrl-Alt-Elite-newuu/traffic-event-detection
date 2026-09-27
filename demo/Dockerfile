@@ -17,6 +17,7 @@ COPY src ./src
 COPY weights ./weights
 COPY demo ./demo
 
-ENV JOBS_DIR=/data/jobs PYTHONUNBUFFERED=1
+# CPU-friendly detector settings for the demo (the submission uses 3 / 1280 on a GPU).
+ENV JOBS_DIR=/data/jobs PYTHONUNBUFFERED=1 TRAFFIC_DETECT_STRIDE=8 TRAFFIC_DETECT_IMGSZ=800
 EXPOSE 8000
 CMD ["uvicorn", "demo.app:app", "--host", "0.0.0.0", "--port", "8000"]
