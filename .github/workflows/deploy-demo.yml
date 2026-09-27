@@ -45,6 +45,9 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read          # the image stays private; the server pulls it with this job's token
     steps:
       - uses: actions/checkout@v7
       - name: Copy compose files to the server
@@ -59,15 +62,22 @@ jobs:
           strip_components: 1
       - name: Pull and restart
         uses: appleboy/ssh-action@v1.2.5
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # short-lived: expires when this job ends
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          envs: GHCR_USER,GHCR_TOKEN
           script: |
             set -e
             cd ${{ vars.DEPLOY_DIR }}
             printf 'DOMAIN=%s\nDEMO_TAG=%s\n' '${{ vars.DOMAIN }}' '${{ github.sha }}' > .env
+            trap 'docker logout ghcr.io >/dev/null 2>&1' EXIT      # never leave credentials on the server
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose pull
+            docker logout ghcr.io
             docker compose up -d --remove-orphans
             docker image prune -f
