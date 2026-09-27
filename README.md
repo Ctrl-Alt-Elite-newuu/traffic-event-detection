@@ -164,6 +164,6 @@ predictions_samples.json   our output on the four sample videos
 
 | Member | Role and contributions |
 |---|---|
-| Asila Muxitdinova | TODO |
+| Asila Muxitdinova | Team lead; ML pipeline, backend and DevOps: detection + tracking, camera alignment, traffic-light reading, scene layout and priors, event rules, Part B risk model, demo API, Docker, CI/CD and deployment, website |
 | Shaxnozaxon Abdusalomova | TODO |
 | TODO | TODO |
