@@ -50,6 +50,7 @@ WRONG_MIN_CONSISTENCY = 0.8    # only where the flow prior is one-directional
 WRONG_MIN_SAMPLES = 20
 WRONG_COS = -0.5               # heading at least 120 degrees off the usual direction
 WRONG_MIN_SEC = 1.5
+EDGE_PX = 40.0                 # vehicles cut off by the bottom of the frame have no reliable ground point
 
 # --- failure to yield ---
 YIELD_MIN_SPEED = 30.0         # a vehicle waiting on the crossing is not driving through it
@@ -179,7 +180,7 @@ def wrong_way(tracks: list[Track], scene: Scene) -> list[Segment]:
             continue
         against = np.zeros(len(tr.t), bool)
         for k, (p, h, s) in enumerate(zip(tr.foot, tr.heading, tr.speed)):
-            if s < WRONG_MIN_SPEED:
+            if s < WRONG_MIN_SPEED or p[1] > config.REF_H - EDGE_PX:
                 continue
             flow, consistency, n = scene.flow_at(*p)
             against[k] = consistency >= WRONG_MIN_CONSISTENCY and n >= WRONG_MIN_SAMPLES and np.dot(h, flow) < WRONG_COS
