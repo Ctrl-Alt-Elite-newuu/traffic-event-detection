@@ -12,13 +12,17 @@
  },
  "stop_lines": {
   "lower": {"_doc": "white stop line before crosswalk A; vehicles cross it moving down-right", "line": [[285, 525], [960, 452]], "signal": "main"},
-  "upper": {"_doc": "no painted line visible; the near edge of crosswalk B is used", "line": [[1198, 545], [1850, 505]], "signal": "main"}
+  "upper": {"_doc": "no painted line visible; the near edge of crosswalk B is used. Its signal faces away from the camera: in every sample more vehicles cross here while 'main' is red than green, so the visible light does not control it", "line": [[1198, 545], [1850, 505]], "signal": null}
  },
  "traffic_lights": {
-  "main": {"_doc": "3-lamp vehicle signal on the median facing the camera; controls the upper carriageway, assumed in phase with the lower one",
+  "main": {"_doc": "3-lamp vehicle signal on the median facing the camera. The lower carriageway runs in phase with it (in the samples ~99% of its stop-line crossings happen on green); the upper carriageway does not",
            "red": [1153, 360, 1170, 378], "yellow": [1153, 378, 1170, 394], "green": [1153, 394, 1170, 410]},
   "side": {"_doc": "2-lamp signal on the bottom-left pole, facing the camera; in phase with main in every sample (backup when main is occluded)",
                "red": [263, 481, 281, 499], "green": [263, 500, 281, 518]}
+ },
+ "parking": {
+  "_doc": "roadside parking pocket on the left edge: cars stand here for minutes and people walk to them; not an event",
+  "left_pocket": [[0, 340], [205, 340], [225, 545], [0, 565]]
  },
  "non_carriageway": {
   "_doc": "raised areas inside the road where vehicles cannot be and pedestrians are allowed",

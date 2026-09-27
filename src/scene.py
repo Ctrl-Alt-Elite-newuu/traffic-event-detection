@@ -1,17 +1,20 @@
-"""Scene layout of the fixed camera: crossings, stop lines, traffic lights, islands.
+"""Scene layout of the fixed camera: crossings, stop lines, traffic lights, islands, road and flow.
 
-Geometry comes from scene.json (hand-annotated) in 1920x1080 reference pixels.
+Geometry comes from scene.json (hand-annotated) in 1920x1080 reference pixels. The road mask and
+the usual direction of travel come from assets/scene_priors.npz (learned from the sample videos'
+tracks by scripts/build_scene_priors.py).
 """
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
 import numpy as np
 
 SCENE_JSON = Path(__file__).with_name("scene.json")
+PRIORS_PATH = Path(__file__).with_name("assets") / "scene_priors.npz"
 
 
 def _poly(points) -> np.ndarray:
@@ -36,10 +39,13 @@ class Scene:
     lights: dict[str, dict[str, tuple[int, int, int, int]]]
     islands: dict[str, np.ndarray]
     carriageway_heading: dict[str, float]
+    parking: dict[str, np.ndarray] = field(default_factory=dict)
+    priors: dict[str, np.ndarray] = field(default_factory=dict)
 
     @classmethod
-    def load(cls, path: Path = SCENE_JSON) -> "Scene":
+    def load(cls, path: Path = SCENE_JSON, with_priors: bool = True) -> "Scene":
         d = json.loads(path.read_text())
+        priors = dict(np.load(PRIORS_PATH)) if with_priors and PRIORS_PATH.exists() else {}
         return cls(
             crosswalks={k: _poly(v) for k, v in d["crosswalks"].items()},
             stop_lines={k: _poly(v["line"]) for k, v in d["stop_lines"].items()},
@@ -48,7 +54,32 @@ class Scene:
                     for k, v in d["traffic_lights"].items()},
             islands={k: _poly(v) for k, v in d["non_carriageway"].items() if not k.startswith("_")},
             carriageway_heading={k: float(v["heading_deg"]) for k, v in d["carriageways"].items()},
+            parking={k: _poly(v) for k, v in d.get("parking", {}).items() if not k.startswith("_")},
+            priors=priors,
         )
+
+    def _cell(self, x: float, y: float) -> tuple[int, int]:
+        c = int(self.priors["cell"])
+        gh, gw = self.priors["road"].shape
+        return min(max(int(y // c), 0), gh - 1), min(max(int(x // c), 0), gw - 1)
+
+    def on_road(self, x: float, y: float, inner: bool = False) -> bool:
+        """True on the carriageway (where vehicles drive), reference coordinates.
+
+        inner=True keeps only cells at least ~3 cells away from its edge: the learned mask spills a
+        little onto the kerb, and a pedestrian walking along the pavement is not on the road.
+        """
+        if inner:
+            if "road_inner" not in self.priors:
+                road = self.priors["road"].astype(np.uint8)
+                self.priors["road_inner"] = cv2.erode(road, np.ones((7, 7), np.uint8)).astype(bool)
+            return bool(self.priors["road_inner"][self._cell(x, y)])
+        return bool(self.priors["road"][self._cell(x, y)])
+
+    def flow_at(self, x: float, y: float) -> tuple[np.ndarray, float, int]:
+        """Usual direction of travel here: (unit vector, consistency 0..1, number of samples)."""
+        i = self._cell(x, y)
+        return self.priors["direction"][i], float(self.priors["consistency"][i]), int(self.priors["samples"][i])
 
     def to_video(self, A: np.ndarray) -> "Scene":
         """This scene mapped into a video's own pixel coordinates, given A: video -> reference (see align.py)."""
@@ -69,6 +100,7 @@ class Scene:
             lights={k: {lamp: box(b) for lamp, b in v.items()} for k, v in self.lights.items()},
             islands={k: pts(v) for k, v in self.islands.items()},
             carriageway_heading=dict(self.carriageway_heading),
+            parking={k: pts(v) for k, v in self.parking.items()},
         )
 
     def crosswalk_at(self, x: float, y: float) -> str | None:
@@ -76,6 +108,9 @@ class Scene:
             if inside(poly, x, y):
                 return name
         return None
+
+    def in_parking(self, x: float, y: float) -> bool:
+        return any(inside(p, x, y) for p in self.parking.values())
 
     def on_island(self, x: float, y: float) -> bool:
         return any(inside(p, x, y) for p in self.islands.values())

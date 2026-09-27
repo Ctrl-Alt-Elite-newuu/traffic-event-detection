@@ -1,0 +1,22 @@
+# Site block for the server's existing Caddy. Add it once to /etc/caddy/Caddyfile (or import this
+# file from there) and reload Caddy; it obtains the HTTPS certificate automatically.
+ctrl-alt-elite.sukoon.uz {
+	encode zstd gzip
+
+	handle /api/* {
+		request_body {
+			max_size 320MB
+		}
+		reverse_proxy 127.0.0.1:8001 {
+			transport http {
+				read_timeout 10m
+			}
+		}
+	}
+
+	handle {
+		root * /srv/site
+		try_files {path} /index.html
+		file_server
+	}
+}

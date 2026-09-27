@@ -1,4 +1,5 @@
 """Shared constants. Every tunable number of the pipeline lives here."""
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -13,8 +14,9 @@ REF_W, REF_H = 1920, 1080
 
 # Detection / tracking
 DETECTOR_WEIGHTS = WEIGHTS_DIR / "yolo11s.pt"
-DETECT_STRIDE = 3          # run the detector on every N-th frame (30 fps -> 10 fps)
-DETECT_IMGSZ = 1280        # detector input size (longest side)
+# The live demo runs on a CPU server and overrides these for speed (see demo/Dockerfile).
+DETECT_STRIDE = int(os.environ.get("TRAFFIC_DETECT_STRIDE", 3))    # detector on every N-th frame (30 -> 10 fps)
+DETECT_IMGSZ = int(os.environ.get("TRAFFIC_DETECT_IMGSZ", 1280))   # detector input size (longest side)
 DETECT_CONF = 0.10       # low on purpose: ByteTrack uses low-score boxes in its 2nd association
 
 # COCO class id -> our road-user type

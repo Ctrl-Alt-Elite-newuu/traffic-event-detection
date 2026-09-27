@@ -54,7 +54,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          source: deploy/docker-compose.yml,deploy/Caddyfile
+          source: deploy/docker-compose.yml
           target: ${{ vars.DEPLOY_DIR }}
           strip_components: 1
       - name: Pull and restart
@@ -67,7 +67,7 @@ jobs:
           script: |
             set -e
             cd ${{ vars.DEPLOY_DIR }}
-            printf 'DOMAIN=%s\nSITE_DIR=%s\nDEMO_TAG=%s\n' '${{ vars.DOMAIN }}' '${{ vars.SITE_DIR }}' '${{ github.sha }}' > .env
+            printf 'DOMAIN=%s\nDEMO_TAG=%s\n' '${{ vars.DOMAIN }}' '${{ github.sha }}' > .env
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f

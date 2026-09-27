@@ -1,31 +1,18 @@
-# Production stack on the team server: HTTPS reverse proxy + live-demo API.
-#   The website's static build is rsynced into ${SITE_DIR} by the web repo's workflow.
-#   Values come from deploy/.env (written by the deploy workflow, see .env.example).
+# Live-demo API on the team server. The server's existing Caddy (which also serves other sites)
+# terminates HTTPS, serves the website from SITE_DIR and proxies /api to this container; see
+# deploy/caddy-site.caddy. Values come from deploy/.env, written by the deploy workflow.
 services:
   demo:
     image: ghcr.io/ctrl-alt-elite-newuu/traffic-event-detection-demo:${DEMO_TAG:-latest}
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"      # only reachable from the server itself (Caddy)
     environment:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-300}
-      MAX_DURATION_SEC: ${MAX_DURATION_SEC:-150}
+      MAX_DURATION_SEC: ${MAX_DURATION_SEC:-120}
       CORS_ORIGINS: https://${DOMAIN}
     volumes:
       - demo-jobs:/data/jobs
 
-  caddy:
-    image: caddy:2
-    restart: unless-stopped
-    depends_on: [demo]
-    ports: ["80:80", "443:443"]
-    environment:
-      DOMAIN: ${DOMAIN}
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ${SITE_DIR:-/srv/site}:/srv/site:ro
-      - caddy-data:/data
-      - caddy-config:/config
-
 volumes:
   demo-jobs:
-  caddy-data:
-  caddy-config:
